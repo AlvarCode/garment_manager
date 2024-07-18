@@ -1,7 +1,9 @@
-from PyQt6.QtWidgets import QMainWindow, QWidget, QApplication, QTableWidget, QHeaderView, QTableWidgetItem, QMessageBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtWidgets import QMainWindow, QWidget, QApplication, QTableWidget, QHeaderView, QTableWidgetItem, QMessageBox, QFileDialog
+from PyQt6.QtCore import Qt, QFile
 from interfaces import main, ext_color_window
 import sys
+import json
 
 
 class Garment:
@@ -43,17 +45,14 @@ class GarmentManager(QMainWindow):
         super().__init__()
         self.ui = main.Ui_MainWindow()
         self.ui.setupUi(self)
-        self.garments = [
-            Garment("HDHKD", "prenda", 15, "X S", "None"),
-            Garment()
-        ]
+        self.garments = []
         self.current_garment = None
         self.len_current_code = 0
+        self.modified_data = False
 
         self.set_current_page(0)
         self.configure_table(self.ui.garments)
         self.configure_table(self.ui.colors)
-        self.load_data()
         self.ui.colors.setRowCount(0)
 
         # clicks event handlers
@@ -67,32 +66,63 @@ class GarmentManager(QMainWindow):
         self.ui.code.textEdited.connect(self.check_garment_code_format)
         self.ui.garments.cellClicked.connect(self.select_row)
         self.ui.colors.cellClicked.connect(self.select_row)
+        self.ui.load_file_act.triggered.connect(self.load_data_file)
+        self.ui.generate_file_act.triggered.connect(self.generate_file)
 
     def set_current_page(self, idx):
         self.ui.stackedWidget.setCurrentIndex(idx)
         if idx == 1:
+            self.clean_registry()
             self.current_garment = Garment()
-            self.ui.colors.setRowCount(0)
         elif self.current_garment != None:
             self.current_garment = None
 
-    def load_data(self):
+    def load_data_file(self):
+        def read_file(filename):
+            file = QFile(filename)
+            if not file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+                send_message(f"No se pudo leer el archivo {filename}")
+                return
+
+            self.garments = json.loads(bytes(file.readAll()))
+            file.close()
+            self.show_data()
+
+        f_dialog = QFileDialog(self)
+        f_dialog.setNameFilter("*.json")
+        f_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        f_dialog.fileSelected.connect(read_file)
+        f_dialog.exec()
+
+    def show_data(self):
         if len(self.garments) > 0:
             self.ui.title.setText(f"Prendas Registradas ({len(self.garments)})")
             self.ui.garments.setRowCount(len(self.garments))
 
             for i, garment in enumerate(self.garments):
-                self.ui.garments.setItem(i, 0, self.create_table_item(garment.code))
-                self.ui.garments.setItem(i, 1, self.create_table_item(garment.name))
-                self.ui.garments.setItem(i, 2, self.create_table_item(garment.price))
-                self.ui.garments.setItem(i, 3, self.create_table_item(garment.sizes))
-                self.ui.garments.setItem(i, 4, self.create_table_item(garment.category))
+                self.set_garment_into_table(i, garment)
+
+    def generate_file(self):
+        filename, _ = QFileDialog.getSaveFileName(self, "Guardar como", "Nombre de archivo.json", "(*.json)", options=QFileDialog().options())
+        if filename:
+            with open(filename, 'w') as f:
+                f.write(json.dumps(self.garments, indent=4))
+                f.close()
+        self.modified_data = False
+        send_message(f"Archivo {filename} generado correctamente")
 
     def create_table_item(self, value):
         item = QTableWidgetItem(str(value))
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         item.setFlags(item.flags() ^ Qt.ItemFlag.ItemIsEditable)
         return item
+    
+    def set_garment_into_table(self, row:int, garment:dict):
+        self.ui.garments.setItem(row, 0, self.create_table_item(garment["code"]))
+        self.ui.garments.setItem(row, 1, self.create_table_item(garment["name"]))
+        self.ui.garments.setItem(row, 2, self.create_table_item(garment["price"]))
+        self.ui.garments.setItem(row, 3, self.create_table_item(garment["sizes"]))
+        self.ui.garments.setItem(row, 4, self.create_table_item(garment["category"]))
 
     def register_garment(self):
         code = self.ui.code.text().strip()
@@ -100,7 +130,7 @@ class GarmentManager(QMainWindow):
         sizes = self.ui.sizes.text().strip()
 
         def error(widget:QWidget = None, message = ''):
-            if message == '': send_message("Aún hay campos vac[ios]")
+            if message == '': send_message("Aún hay campos vacíos")
             else: send_message(f"{message}")
             if widget != None: widget.setFocus()
 
@@ -113,7 +143,7 @@ class GarmentManager(QMainWindow):
         elif sizes == '':
             error(self.ui.sizes)
         elif self.current_garment.colors == []:
-            error(message=" La prenda no tiene colores")
+            error(message="Asigne al menos un color de prenda")
             self.add_colors()
         else:
             self.current_garment.code = code
@@ -122,23 +152,35 @@ class GarmentManager(QMainWindow):
             self.current_garment.sizes = sizes
             self.current_garment.category = self.ui.category.currentText()
 
-            self.garments.append(self.current_garment)
-
-            # Cleaning
-            self.ui.code.clear()
-            self.ui.name.clear()
-            self.ui.sizes.clear()
+            self.garments.append(self.current_garment.__dict__)
+            self.ui.garments.insertRow(self.ui.garments.rowCount())
+            self.set_garment_into_table(len(self.garments) - 1, self.current_garment.__dict__)
+            self.clean_registry()
             self.current_garment = Garment()
-            self.len_current_code = 0
+            self.modified_list_handler()
+            if not self.modified_data:
+                self.modified_data = True            
+            send_message("Prenda registrada satisfactoriamente")
+
+    def clean_registry(self):
+        self.ui.code.clear()
+        self.ui.name.clear()
+        self.ui.sizes.clear()
+        self.ui.colors.setRowCount(0)
+        self.len_current_code = 0
 
     def delete_garment(self):
         i = self.ui.garments.currentRow()
         if i != -1:
-            if send_message("Esta seguro de eliminar esta prenda?", "Si lo hace no habra vuelta atras"):
+            op = send_message("¿Está seguro de eliminar esta prenda?", "Si lo hace no podrá recuperarla", 3)
+            if op == QMessageBox.StandardButton.Yes:
                 self.garments.pop(i)
                 self.ui.garments.removeRow(i)
+                self.modified_list_handler()
+                if not self.modified_data: 
+                    self.modified_data = True
         else:
-            send_message("Primero seleccione una fila")
+            send_message("No hay una prenda seleccionada para eliminar")
 
     def add_colors(self):
         def add(hexcode:str, image_url:str):
@@ -181,8 +223,8 @@ class GarmentManager(QMainWindow):
         return False if self.find_garment(code) == -1 else True
 
     def find_garment(self, code:str):
-        for i in range(len(self.garments) - 1):
-            if self.garments[i].code == code:
+        for i in range(len(self.garments)):
+            if self.garments[i]["code"] == code:
                 return i
         return -1
 
@@ -200,18 +242,37 @@ class GarmentManager(QMainWindow):
         if len(self.garments) == 0:
             self.ui.delete_garment_btn.setEnabled(False)
         else:
-            title + str(len(self.garments))
-            if (len(self.garments) == 1):
-                self.ui.delete_garment_btn.setEnabled(False)
+            title += f" ({str(len(self.garments))})"
+            if len(self.garments) == 1:
+                self.ui.delete_garment_btn.setEnabled(True)
         self.ui.title.setText(title)
 
-def send_message(msg:str, info = ""):
+    def closeEvent(self, e:QCloseEvent):
+        if self.modified_data:
+            op = send_message("¿Desea cerrar sin guardar los cambios?", "Si lo hace no podrá recurarlos", 3)
+            if op != QMessageBox.StandardButton.Yes:
+                e.ignore()
+            
+
+def send_message(msg:str, info = "", type = 0):
     msg_box = QMessageBox()
-    if info != "":
+    if type == 0: # information
+        icon = QMessageBox.Icon.Information
+        btns = QMessageBox.StandardButton.Ok
+    
+    elif type == 1: # warning
+        icon = QMessageBox.Icon.Warning
+        btns = QMessageBox.StandardButton.Close
+    
+    else: # binary question
         msg_box.setInformativeText(info)
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        icon = QMessageBox.Icon.Question
+        btns = QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes
+
+    msg_box.setIcon(icon)
     msg_box.setText(msg)
-    return msg_box.exec() == QMessageBox.StandardButton.Yes
+    msg_box.setStandardButtons(btns)
+    return msg_box.exec()
 
 
 if __name__ == "__main__":

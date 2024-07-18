@@ -36,6 +36,7 @@ class EColorWindow(QDialog, color_window.Ui_AggregationColorWindow):
     def save(self):
         if self.image_url.text() == '':
             msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Icon.Information)
             msg_box.setText("Ingrese la URL de la imagen correspondiente al color")
             msg_box.exec()
             self.image_url.setFocus()
