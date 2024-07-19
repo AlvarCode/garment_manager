@@ -395,17 +395,17 @@ QDoubleSpinBox, QComboBox {
               <widget class="QComboBox" name="category">
                <item>
                 <property name="text">
-                 <string>Nuevo elemento</string>
+                 <string>Category 1</string>
                 </property>
                </item>
                <item>
                 <property name="text">
-                 <string>Nuevo elemento</string>
+                 <string>Category 2</string>
                 </property>
                </item>
                <item>
                 <property name="text">
-                 <string>Nuevo elemento</string>
+                 <string>Category 3</string>
                 </property>
                </item>
               </widget>
@@ -501,6 +501,15 @@ QDoubleSpinBox, QComboBox {
              </item>
              <item row="1" column="0" colspan="3">
               <widget class="QTableWidget" name="colors">
+               <attribute name="horizontalHeaderMinimumSectionSize">
+                <number>100</number>
+               </attribute>
+               <attribute name="horizontalHeaderDefaultSectionSize">
+                <number>100</number>
+               </attribute>
+               <attribute name="horizontalHeaderHighlightSections">
+                <bool>true</bool>
+               </attribute>
                <attribute name="horizontalHeaderStretchLastSection">
                 <bool>true</bool>
                </attribute>

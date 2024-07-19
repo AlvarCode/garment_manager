@@ -1,5 +1,6 @@
 from PyQt6.QtGui import QCloseEvent
-from PyQt6.QtWidgets import QMainWindow, QWidget, QApplication, QTableWidget, QHeaderView, QTableWidgetItem, QMessageBox, QFileDialog
+from PyQt6.QtWidgets import QMainWindow, QWidget, QApplication, QTableWidget, QHeaderView, QTableWidgetItem, \
+    QMessageBox, QFileDialog
 from PyQt6.QtCore import Qt, QFile
 from interfaces import main, ext_color_window
 import sys
@@ -52,10 +53,10 @@ class GarmentManager(QMainWindow):
 
         self.set_current_page(0)
         self.configure_table(self.ui.garments)
-        self.configure_table(self.ui.colors)
+        self.configure_table(self.ui.colors, False)
         self.ui.colors.setRowCount(0)
 
-        # clicks event handlers
+        # Event handlers
         self.ui.add_garment_btn.clicked.connect(lambda: self.set_current_page(1))
         self.ui.back_btn.clicked.connect(lambda: self.set_current_page(0))
         self.ui.save_btn.clicked.connect(self.register_garment)
@@ -64,6 +65,7 @@ class GarmentManager(QMainWindow):
         self.ui.delete_color_btn.clicked.connect(self.delete_color)
 
         self.ui.code.textEdited.connect(self.check_garment_code_format)
+        self.ui.sizes.textEdited.connect(lambda text: self.ui.sizes.setText(text.upper()))
         self.ui.garments.cellClicked.connect(self.select_row)
         self.ui.colors.cellClicked.connect(self.select_row)
         self.ui.load_file_act.triggered.connect(self.load_data_file)
@@ -81,7 +83,7 @@ class GarmentManager(QMainWindow):
         def read_file(filename):
             file = QFile(filename)
             if not file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
-                send_message(f"No se pudo leer el archivo {filename}")
+                send_message(f"No se pudo leer el archivo '{filename}'")
                 return
 
             self.garments = json.loads(bytes(file.readAll()))
@@ -109,11 +111,11 @@ class GarmentManager(QMainWindow):
                 f.write(json.dumps(self.garments, indent=4))
                 f.close()
         self.modified_data = False
-        send_message(f"Archivo {filename} generado correctamente")
+        send_message(f"Archivo '{filename}' generado correctamente")
 
-    def create_table_item(self, value):
+    def create_table_item(self, value, h_center = True):
         item = QTableWidgetItem(str(value))
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter if h_center else Qt.AlignmentFlag.AlignVCenter)
         item.setFlags(item.flags() ^ Qt.ItemFlag.ItemIsEditable)
         return item
     
@@ -125,7 +127,7 @@ class GarmentManager(QMainWindow):
         self.ui.garments.setItem(row, 4, self.create_table_item(garment["category"]))
 
     def register_garment(self):
-        code = self.ui.code.text().strip()
+        code = self.ui.code.text()
         name = self.ui.name.text().strip()
         sizes = self.ui.sizes.text().strip()
 
@@ -155,6 +157,7 @@ class GarmentManager(QMainWindow):
             self.garments.append(self.current_garment.__dict__)
             self.ui.garments.insertRow(self.ui.garments.rowCount())
             self.set_garment_into_table(len(self.garments) - 1, self.current_garment.__dict__)
+            self.ui.garments.resizeColumnsToContents()
             self.clean_registry()
             self.current_garment = Garment()
             self.modified_list_handler()
@@ -187,7 +190,8 @@ class GarmentManager(QMainWindow):
             if self.current_garment.add_color(hexcode, image_url):
                 self.ui.colors.insertRow(len(self.current_garment.colors) - 1)
                 self.ui.colors.setItem(len(self.current_garment.colors) - 1, 0, self.create_table_item(hexcode))
-                self.ui.colors.setItem(len(self.current_garment.colors) - 1, 1, self.create_table_item(image_url))
+                self.ui.colors.setItem(len(self.current_garment.colors) - 1, 1, self.create_table_item(image_url, h_center=False))
+                self.ui.colors.resizeColumnToContents(1)
                 colors_win.image_url.clear()
 
         colors_win = ext_color_window.EColorWindow()
@@ -228,8 +232,9 @@ class GarmentManager(QMainWindow):
                 return i
         return -1
 
-    def configure_table(self, table:QTableWidget):
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    def configure_table(self, table:QTableWidget, is_stretch = True):
+        if is_stretch: 
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         table.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         table.horizontalHeader().setFixedHeight(30)
         table.verticalHeader().setFixedWidth(20)
@@ -249,7 +254,7 @@ class GarmentManager(QMainWindow):
 
     def closeEvent(self, e:QCloseEvent):
         if self.modified_data:
-            op = send_message("¿Desea cerrar sin guardar los cambios?", "Si lo hace no podrá recurarlos", 3)
+            op = send_message("¿Desea cerrar sin guardar los cambios?", "Si lo hace no podrá recuperarlos", 3)
             if op != QMessageBox.StandardButton.Yes:
                 e.ignore()
             
